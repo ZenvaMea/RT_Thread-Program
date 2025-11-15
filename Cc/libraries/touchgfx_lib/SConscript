@@ -1,0 +1,82 @@
+import os
+import rtconfig
+from building import *
+
+cwd = GetCurrentDir()
+libs = []
+# add general drivers
+
+tar_src = Split('''
+TouchGFX/target/generated/OSWrappers.cpp
+TouchGFX/target/generated/STM32DMA.cpp
+TouchGFX/target/generated/TouchGFXConfiguration.cpp
+TouchGFX/target/generated/TouchGFXGeneratedHAL.cpp
+TouchGFX/target/generated/HardwareMJPEGDecoder.cpp
+TouchGFX/target/generated/nema_hal.c
+TouchGFX/target/CortexMMCUInstrumentation.cpp
+TouchGFX/target/STM32TouchController.cpp
+TouchGFX/target/TouchGFXGPIO.cpp
+TouchGFX/target/TouchGFXHAL.cpp
+''')
+
+tar_path = [cwd + '/TouchGFX/target']
+tar_path += [cwd + '/TouchGFX/target/generated']
+
+group = DefineGroup('TouchGFX/target', tar_src, depend = ['ART_PI_TouchGFX_LIB'], CPPPATH = tar_path)
+
+app_path  = [cwd + '/TouchGFX']
+app_path += [cwd + '/Middlewares/ST/touchgfx/framework/include']
+app_path += [cwd + '/Middlewares/ST/touchgfx/framework/include/touchgfx']
+app_path += [cwd + '/Middlewares/ST/touchgfx_components/gpu2d/NemaGFX/include']
+app_path += [cwd + '/Middlewares/ST/touchgfx_components/gpu2d/TouchGFXNema/include']
+appSrc = Glob('./TouchGFX/App/app_touchgfx.c')
+appSrc += Glob('./TouchGFX/App/sample_touchgfx.c')
+
+if rtconfig.CROSS_TOOL == 'gcc':
+    libpath = [cwd + '/Middlewares/ST/touchgfx/lib/core/cortex_m7/gcc']
+    libs += ['touchgfx-float-abi-hard']
+    appSrc += [cwd + '/Middlewares/ST/touchgfx_components/gpu2d/NemaGFX/lib/core/cortex_m7/gcc/libnemagfx.a']
+    appSrc += [cwd + '/Middlewares/ST/touchgfx_components/gpu2d/NemaGFX/lib/core/cortex_m7/gcc/libnemagfx-wc16.a']
+    appSrc += [cwd + '/Middlewares/ST/touchgfx_components/gpu2d/NemaGFX/lib/core/cortex_m7/gcc/libnemagfx-float-abi-hard-wc16.a']
+    appSrc += [cwd + '/Middlewares/ST/touchgfx_components/gpu2d/TouchGFXNema/lib/cortex_m7/gcc/libtouchgfxnema.a']
+elif rtconfig.CROSS_TOOL == 'keil':
+    libpath = [cwd + '/Middlewares/ST/touchgfx/lib/core/cortex_m7/Keil6.x']
+    libs += ['touchgfx_core_wchar16']
+    appSrc += [cwd + '/Middlewares/ST/touchgfx_components/gpu2d/NemaGFX/lib/core/cortex_m7/Keil6.x/nemagfx_core_release-wchar16.lib']
+    appSrc += [cwd + '/Middlewares/ST/touchgfx_components/gpu2d/TouchGFXNema/lib/cortex_m7/Keil6.x/touchgfxnema_release-wchar16.lib']
+
+group = group + DefineGroup('TouchGFX/app', appSrc, depend = ['ART_PI_TouchGFX_LIB'], CPPPATH = app_path, LIBS = libs, LIBPATH = libpath)
+
+md_path = [cwd + '/../../libraries/CMSIS/RTOS2/Include']
+md_path += [cwd + '/Middlewares/Third_Party/CMSIS_RTOS_V2']
+md_src = Glob('./Middlewares/Third_Party/CMSIS_RTOS_V2/*.c')
+
+group = group + DefineGroup('TouchGFX/Middlewares/rtt', md_src, depend = ['ART_PI_TouchGFX_LIB'], CPPPATH = md_path)
+
+# add TouchGFX generated
+genSrc = Glob('./TouchGFX/generated/fonts/src/*.cpp')
+genSrc += Glob('./TouchGFX/generated/gui_generated/src/*/*.cpp')
+genSrc += Glob('./TouchGFX/generated/texts/src/*.cpp')
+genSrc += Glob('./TouchGFX/generated/images/src/*.cpp')
+genSrc += Glob('./TouchGFX/generated/images/src/*/*.cpp')
+genSrc += Glob('./TouchGFX/generated/images/src/*/*/*.cpp')
+genSrc += Glob('./TouchGFX/generated/images/src/*/*/*/*.cpp')
+if rtconfig.CROSS_TOOL == 'keil':
+    genSrc += Glob('./TouchGFX/generated/videos/src/keil/*.s')
+
+genPath = [cwd + '/TouchGFX/generated/fonts/include']
+genPath += [cwd + '/TouchGFX/generated/gui_generated/include']
+genPath += [cwd + '/TouchGFX/generated/texts/include']
+genPath += [cwd + '/TouchGFX/generated/videos/include']
+genPath += [cwd + '/TouchGFX/generated/images/include']
+
+group = group + DefineGroup('TouchGFX/generated', genSrc, depend = ['ART_PI_TouchGFX_LIB'], CPPPATH = genPath)
+
+# add TouchGFX gui
+guiSrc = Glob('./TouchGFX/gui/src/*/*.cpp')
+guiPath = [cwd + '/TouchGFX/gui/include']
+
+group = group + DefineGroup('TouchGFX/gui', guiSrc, depend = ['ART_PI_TouchGFX_LIB'], CPPPATH = guiPath)
+
+Return('group')
+
