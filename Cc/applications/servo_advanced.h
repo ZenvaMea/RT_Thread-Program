@@ -5,7 +5,7 @@
  *
  * Change Logs:
  * Date           Author       Notes
- * 2025-01-14     Claude       舵机高级控制接口
+ * 2025-01-14     Cc           舵机高级控制接口
  */
 
 #ifndef __SERVO_ADVANCED_H__

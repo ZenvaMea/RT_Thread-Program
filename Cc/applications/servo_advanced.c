@@ -5,11 +5,12 @@
  *
  * Change Logs:
  * Date           Author       Notes
- * 2025-01-14       Claude       舵机高级控制接口实现
+ * 2025-01-14       Cc       舵机高级控制接口实现
  */
 
 #include "servo_advanced.h"
 #include "servo_control.h"
+#include "hmi_display.h"
 #include <rtthread.h>
 
 #define DBG_TAG "servo.adv"
@@ -216,6 +217,9 @@ int servo_move_by_id_speed(int servo_id, int position, int speed)
     if (ret == 0)
     {
         LOG_I("Servo %d moved to position %d (speed: %d)", servo_id, position, speed);
+
+        /* 更新HMI显示 */
+        hmi_update_servo_pos(servo_id, position);
     }
 
     return ret;

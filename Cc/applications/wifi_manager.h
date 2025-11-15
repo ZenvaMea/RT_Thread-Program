@@ -5,7 +5,7 @@
  *
  * Change Logs:
  * Date           Author       Notes
- * 2025-01-14     Claude       WiFi管理模块
+ * 2025-01-14     Cc           WiFi管理模块
  */
 
 #ifndef __WIFI_MANAGER_H__

@@ -5,7 +5,7 @@
  *
  * Change Logs:
  * Date           Author       Notes
- * 2025-01-14     Claude       舵机控制接口实现
+ * 2025-01-14     Cc           舵机控制接口实现
  */
 
 #include "servo_control.h"

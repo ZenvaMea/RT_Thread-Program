@@ -5,10 +5,11 @@
  *
  * Change Logs:
  * Date           Author       Notes
- * 2025-01-14     Claude       WiFi管理模块实现
+ * 2025-01-14     Cc           WiFi管理模块实现
  */
 
 #include "wifi_manager.h"
+#include "hmi_display.h"
 #include <rtthread.h>
 #include <wlan_mgnt.h>
 #include <wlan_prot.h>
@@ -22,6 +23,10 @@
 #define DBG_TAG "wifi.mgr"
 #define DBG_LVL DBG_LOG
 #include <rtdbg.h>
+
+#ifdef RT_USING_FINSH
+#include <finsh.h>
+#endif
 
 static wifi_status_t g_wifi_status = WIFI_STATUS_DISCONNECTED;
 static struct rt_event wifi_event;
@@ -37,6 +42,26 @@ static void wifi_event_handler(int event, struct rt_wlan_buff *buff, void *param
         LOG_I("WiFi ready");
         g_wifi_status = WIFI_STATUS_CONNECTED;
         rt_event_send(&wifi_event, (1 << 0));
+
+        /* 更新HMI显示 */
+        {
+            struct rt_wlan_info info;
+            char ip_buf[16] = {0};
+            int rssi = 0;
+
+            /* 获取WiFi信息 */
+            if (rt_wlan_get_info(&info) == RT_EOK)
+            {
+                rssi = info.rssi;
+            }
+
+            /* 获取IP地址 */
+            wifi_get_ip(ip_buf, sizeof(ip_buf));
+
+            /* 更新HMI WiFi状态显示 */
+            hmi_update_wifi_status((const char *)info.ssid.val, ip_buf, rssi);
+            hmi_set_text("t_msg", "WiFi Connected!");
+        }
         break;
 
     case RT_WLAN_EVT_STA_CONNECTED:
@@ -46,11 +71,19 @@ static void wifi_event_handler(int event, struct rt_wlan_buff *buff, void *param
     case RT_WLAN_EVT_STA_DISCONNECTED:
         LOG_W("WiFi STA disconnected");
         g_wifi_status = WIFI_STATUS_DISCONNECTED;
+
+        /* 更新HMI显示 */
+        hmi_update_wifi_status(NULL, NULL, 0);
+        hmi_set_text("t_msg", "WiFi Disconnected");
         break;
 
     case RT_WLAN_EVT_STA_CONNECTED_FAIL:
         LOG_E("WiFi STA connect failed");
         g_wifi_status = WIFI_STATUS_CONNECT_FAILED;
+
+        /* 更新HMI显示 */
+        hmi_update_wifi_status(NULL, NULL, 0);
+        hmi_set_text("t_msg", "WiFi Connect Failed");
         break;
 
     case RT_WLAN_EVT_AP_START:
@@ -226,3 +259,186 @@ int wifi_wait_ready(int timeout_ms)
         return -1;
     }
 }
+
+/**
+ * @brief MSH命令：连接ESP32 WiFi AP
+ */
+static int connect_esp32(void)
+{
+    const char *ssid = "ESP32_DEV";
+    const char *password = "12345678";
+
+    LOG_I("Connecting to ESP32 AP...");
+    LOG_I("SSID: %s", ssid);
+
+    /* 连接WiFi */
+    if (wifi_connect(ssid, password) != 0)
+    {
+        LOG_E("Failed to start WiFi connection");
+        return -1;
+    }
+
+    /* 等待连接成功并获取IP */
+    LOG_I("Waiting for WiFi ready (30s timeout)...");
+    if (wifi_wait_ready(30000) != 0)
+    {
+        LOG_E("WiFi connection timeout");
+        return -1;
+    }
+
+    /* 获取IP地址 */
+    char ip_buf[16];
+    if (wifi_get_ip(ip_buf, sizeof(ip_buf)) == 0)
+    {
+        LOG_I("WiFi connected successfully!");
+        LOG_I("IP Address: %s", ip_buf);
+
+        /* 更新HMI显示 */
+        hmi_set_text("t_msg", "WiFi Connected!");
+    }
+    else
+    {
+        LOG_W("Connected but no IP address");
+    }
+
+    return 0;
+}
+MSH_CMD_EXPORT(connect_esp32, Connect to ESP32 WiFi AP);
+
+/**
+ * @brief MSH命令：连接指定WiFi
+ */
+static int wifi_join(int argc, char **argv)
+{
+    char ip_buf[16];
+
+    if (argc < 2)
+    {
+        rt_kprintf("Usage: wifi_join <ssid> [password]\n");
+        rt_kprintf("Example: wifi_join MyWiFi 12345678\n");
+        return -1;
+    }
+
+    const char *ssid = argv[1];
+    const char *password = (argc >= 3) ? argv[2] : NULL;
+
+    rt_kprintf("Connecting to WiFi: %s\n", ssid);
+
+    /* 连接WiFi */
+    if (wifi_connect(ssid, password) != 0)
+    {
+        rt_kprintf("Failed to start WiFi connection\n");
+        return -1;
+    }
+
+    /* 等待连接成功并获取IP */
+    rt_kprintf("Waiting for WiFi ready (30s timeout)...\n");
+    if (wifi_wait_ready(30000) != 0)
+    {
+        rt_kprintf("WiFi connection timeout\n");
+        return -1;
+    }
+
+    /* 获取IP地址 */
+    if (wifi_get_ip(ip_buf, sizeof(ip_buf)) == 0)
+    {
+        rt_kprintf("WiFi connected successfully!\n");
+        rt_kprintf("IP Address: %s\n", ip_buf);
+
+        /* 更新HMI显示 */
+        hmi_update_wifi_status(ssid, ip_buf, -50);
+        hmi_set_text("t_msg", "WiFi Connected!");
+    }
+
+    return 0;
+}
+MSH_CMD_EXPORT(wifi_join, Connect to WiFi network);
+
+/**
+ * @brief MSH命令：断开WiFi连接
+ */
+static int wifi_leave(void)
+{
+    rt_kprintf("Disconnecting WiFi...\n");
+
+    if (wifi_disconnect() == 0)
+    {
+        rt_kprintf("WiFi disconnected\n");
+
+        /* 更新HMI显示 */
+        hmi_update_wifi_status(NULL, NULL, 0);
+        hmi_set_text("t_msg", "WiFi Disconnected");
+    }
+    else
+    {
+        rt_kprintf("Failed to disconnect WiFi\n");
+        return -1;
+    }
+
+    return 0;
+}
+MSH_CMD_EXPORT(wifi_leave, Disconnect WiFi);
+
+/**
+ * @brief MSH命令：查看WiFi状态
+ */
+static int wifi_info(void)
+{
+    wifi_status_t status = wifi_get_status();
+    char ip_buf[16] = {0};
+    struct rt_wlan_info info;
+
+    rt_kprintf("========== WiFi Status ==========\n");
+
+    /* 状态 */
+    rt_kprintf("Status: ");
+    switch (status)
+    {
+        case WIFI_STATUS_DISCONNECTED:
+            rt_kprintf("Disconnected\n");
+            break;
+        case WIFI_STATUS_CONNECTING:
+            rt_kprintf("Connecting...\n");
+            break;
+        case WIFI_STATUS_CONNECTED:
+            rt_kprintf("Connected\n");
+            break;
+        case WIFI_STATUS_CONNECT_FAILED:
+            rt_kprintf("Connect Failed\n");
+            break;
+        default:
+            rt_kprintf("Unknown\n");
+            break;
+    }
+
+    /* 如果已连接,显示详细信息 */
+    if (status == WIFI_STATUS_CONNECTED)
+    {
+        /* 获取WiFi信息 */
+        if (rt_wlan_get_info(&info) == RT_EOK)
+        {
+            rt_kprintf("SSID: %s\n", info.ssid.val);
+            rt_kprintf("BSSID: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                      info.bssid[0], info.bssid[1], info.bssid[2],
+                      info.bssid[3], info.bssid[4], info.bssid[5]);
+            rt_kprintf("RSSI: %d dBm\n", info.rssi);
+            rt_kprintf("Channel: %d\n", info.channel);
+        }
+
+        /* 获取IP地址 */
+        if (wifi_get_ip(ip_buf, sizeof(ip_buf)) == 0)
+        {
+            rt_kprintf("IP Address: %s\n", ip_buf);
+        }
+        else
+        {
+            rt_kprintf("IP Address: Not assigned\n");
+        }
+    }
+
+    rt_kprintf("=================================\n");
+
+    return 0;
+}
+MSH_CMD_EXPORT(wifi_info, Show WiFi connection information);
+

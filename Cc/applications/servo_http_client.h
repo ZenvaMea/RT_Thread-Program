@@ -5,7 +5,7 @@
  *
  * Change Logs:
  * Date           Author       Notes
- * 2025-01-14     Claude       HTTP客户端模块
+ * 2025-01-14     Cc           HTTP客户端模块
  */
 
 #ifndef __SERVO_HTTP_CLIENT_H__

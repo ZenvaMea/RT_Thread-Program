@@ -5,7 +5,7 @@
  *
  * Change Logs:
  * Date           Author       Notes
- * 2025-01-14     Claude       HTTP客户端实现
+ * 2025-01-14     Cc           HTTP客户端实现
  */
 
 #include "servo_http_client.h"
